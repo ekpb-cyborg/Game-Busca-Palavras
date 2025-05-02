@@ -1,0 +1,1341 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" id="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=0.5, maximum-scale=3.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://via.placeholder.com/180x180.png?text=Caça-Palavras">
+    <title>Caça-Palavras</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" integrity="sha512-z3gLpd7yknf1YoNbCzqRKc4qyor8gaKU1qmn+CShxbuBusANI9QpRohGBreCFkKxLhei6S9CQXFEbbKuqLg0DA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0 auto;
+            padding: 20px;
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+            background-color: #f0f0f0;
+            touch-action: manipulation;
+            box-sizing: border-box;
+        }
+        h1, h2, h3 {
+            color: #006400;
+            text-align: center;
+        }
+        .main-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ccc;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .main-tabs .tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            background: #f1f1f1;
+            border: 1px solid #ccc;
+            border-bottom: none;
+            border-radius: 5px 5px 0 0;
+            margin-right: 5px;
+        }
+        .main-tabs .tab.active {
+            background: #006400;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-top: none;
+            background: white;
+            border-radius: 0 0 5px 5px;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .grid-container {
+            display: inline-grid;
+            aspect-ratio: 1/1;
+            max-width: 100%;
+            border: 2px solid #e5e7eb;
+            border-radius: 0.5rem;
+            background-color: #f9fafb;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .grid-cell {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid #e5e7eb;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s;
+            font-weight: 500;
+        }
+        .grid-cell:hover {
+            background-color: #f3f4f6;
+        }
+        .selected {
+            background-color: rgba(147, 197, 253, 0.7);
+        }
+        .found {
+            background-color: #34d399;
+            color: white;
+        }
+        .word-found {
+            color: #808080;
+            position: relative;
+            display: inline-block;
+        }
+        .word-found::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 25%;
+            width: 50%;
+            height: 2px;
+            background-color: #808080;
+            transform: translateY(-50%);
+        }
+        #audio-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 10px;
+        }
+        #musica-controle, #sons-controle {
+            cursor: pointer;
+            font-size: 1.2em;
+            color: #006400;
+        }
+        #musica-controle.desligado, #sons-controle.desligado {
+            color: #666;
+        }
+        #musica-controle.ligado, #sons-controle.ligado {
+            color: #00ff00;
+        }
+        #timers {
+            text-align: center;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            color: #006400;
+        }
+        #word-list-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        #word-list {
+            width: 80%;
+            max-width: 300px;
+            padding: 5px;
+            font-size: 1rem;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        #word-list option {
+            padding: 5px;
+        }
+        .social-media {
+            margin: 20px 0;
+        }
+        .social-media h3 {
+            color: #006400;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .social-media a {
+            text-decoration: none;
+            color: #006400;
+        }
+        .social-media p {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 10px 0;
+        }
+        .social-media i {
+            color: #006400;
+            font-size: 1.2em;
+        }
+        .links-list {
+            margin: 20px 0;
+            list-style: none;
+            padding: 0;
+        }
+        .links-list li {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 10px 0;
+        }
+        .links-list a {
+            text-decoration: none;
+            color: #006400;
+            font-weight: bold;
+        }
+        .links-list i {
+            color: #006400;
+            font-size: 1.2em;
+        }
+        .contact-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .contact-form input, .contact-form textarea {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .contact-form button {
+            background-color: #006400;
+            color: white;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .copyright {
+            text-align: center;
+            margin-top: 30px;
+            color: #666;
+        }
+        .copyright a {
+            text-decoration: none;
+            color: #006400;
+            font-weight: bold;
+        }
+        #start-screen {
+            text-align: center;
+            padding: 20px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            color: black;
+        }
+        #start-screen h2 {
+            color: black;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+        #start-screen input {
+            color: black;
+        }
+        #start-screen input::placeholder {
+            color: #999;
+        }
+        #start-screen button {
+            color: #87CEEB;
+        }
+        #player-name {
+            padding: 8px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            width: 80%;
+            max-width: 300px;
+            font-size: 1.2rem;
+        }
+        #player-name::placeholder {
+            font-size: 1.2rem;
+        }
+        #start-button, #music-toggle, #save-button, #load-button, #restart-button, #ranking-button, #shuffle-button, #zoom-toggle, #close-ranking-modal, .contact-form button, #easy-button, #medium-button, #hard-button, #very-hard-button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 1.2rem;
+        }
+        #start-button {
+            background: #666;
+            color: #87CEEB;
+        }
+        #music-toggle {
+            background: #808080;
+            color: #87CEEB;
+        }
+        #save-button, #load-button, #ranking-button, #shuffle-button {
+            background: #666;
+            color: white;
+        }
+        #restart-button {
+            background: #4682b4;
+            color: white;
+        }
+        #very-hard-button {
+            background: #ff0000;
+            color: white;
+        }
+        #start-button:disabled, #save-button:disabled, #load-button:disabled, #shuffle-button:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+        #zoom-control {
+            display: none;
+            text-align: center;
+            margin-top: 10px;
+        }
+        #zoom-toggle {
+            background: #006400;
+            color: white;
+        }
+        #zoom-toggle.desativado {
+            background: #666;
+        }
+        #load-file-input {
+            display: none;
+        }
+        #ranking-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        #ranking-modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            max-width: 90%;
+            max-height: 80%;
+            overflow-y: auto;
+            position: relative;
+        }
+        #ranking-modal-content h2 {
+            margin-bottom: 20px;
+        }
+        #ranking-modal-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        #ranking-modal-content th, #ranking-modal-content td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+        }
+        #ranking-modal-content th {
+            background-color: #006400;
+            color: white;
+        }
+        #ranking-modal-content td {
+            background-color: #f9fafb;
+        }
+        #close-ranking-modal {
+            background: #4682b4;
+            color: white;
+        }
+        .grid-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 50vh;
+        }
+        @media (max-width: 600px) {
+            #botoes-jogo {
+                flex-direction: column;
+                gap: 10px;
+            }
+            #zoom-control {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Caça-Palavras</h1>
+    <div id="start-screen">
+        <h2>Digite seu nome para iniciar</h2>
+        <input type="text" id="player-name" placeholder="Digite seu nome" oninput="checkNameAndPlayMusic()">
+        <br>
+        <button id="start-button" onclick="startWithName()" disabled>Iniciar</button>
+        <button id="music-toggle" onclick="toggleMusic()"><i class="fas fa-volume-up"></i> Som</button>
+        <br>
+        <button id="load-button" onclick="triggerLoadGame()">Carregar Jogo</button>
+        <button id="ranking-button" onclick="showRankingModal()">Ranking</button>
+        <input type="file" id="load-file-input" accept=".json" onchange="loadGameFromFile(event)">
+    </div>
+    <div id="game-content" style="display: none;">
+        <div class="main-tabs">
+            <div class="tab active" onclick="openTab(event, 'jogo-tab')">Jogo</div>
+            <div class="tab" onclick="openTab(event, 'contato')">Contato</div>
+            <div class="tab" onclick="openTab(event, 'ekpb')">EKPB Digital Music ©</div>
+            <div class="tab" onclick="openTab(event, 'como-jogar')">Como Jogar</div>
+            <div class="tab" onclick="openTab(event, 'ranking-tab')">Ranking</div>
+        </div>
+        <div id="jogo-tab" class="tab-content active">
+            <div class="flex justify-center mb-4">
+                <button id="restart-button" onclick="restartGame()">Reiniciar Jogo</button>
+                <button id="shuffle-button" onclick="shuffleWordsBeforeStart()">NOVAS PALAVRAS (<span id="shuffle-count">2</span>)</button>
+            </div>
+            <div class="text-center mb-4">
+                <h3>Jogador: <span id="player-display">Jogador</span></h3>
+            </div>
+            <div class="flex justify-center mb-4" id="botoes-jogo">
+                <button id="easy-button" onclick="startGame('easy')" class="bg-blue-500 text-white px-4 py-2 rounded mr-2 hover:bg-blue-600">Fácil</button>
+                <button id="medium-button" onclick="startGame('medium')" class="bg-yellow-500 text-white px-4 py-2 rounded mr-2 hover:bg-yellow-600">Médio</button>
+                <button id="hard-button" onclick="startGame('hard')" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Difícil</button>
+                <button id="very-hard-button" onclick="startGame('very-hard')" class="bg-red-700 text-white px-4 py-2 rounded hover:bg-red-800">Muito Difícil</button>
+                <button id="save-button" onclick="saveGame()" class="bg-gray-500 text-white px-4 py-2 rounded mr-2 hover:bg-gray-600">Salvar Jogo</button>
+                <button id="load-button" onclick="triggerLoadGame()" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Carregar Jogo</button>
+            </div>
+            <div id="audio-controls">
+                <i id="musica-controle" class="fas fa-volume-up ligado" title="Música de Fundo" onclick="toggleMusic()"></i>
+                <i id="sons-controle" class="fas fa-bell ligado" title="Sons do Jogo" onclick="toggleSounds()"></i>
+            </div>
+            <div id="timers">
+                <div>Tempo Total: <span id="total-time">0.000</span></div>
+                <div>Tempo Palavra: <span id="word-time">60.000</span></div>
+            </div>
+            <div id="zoom-control">
+                <button id="zoom-toggle" onclick="toggleZoom()">Desativar Zoom</button>
+            </div>
+            <div class="flex flex-col items-center">
+                <div id="word-list-container">
+                    <h2 class="text-xl font-semibold mb-2">Palavras</h2>
+                    <select id="word-list" size="1"></select>
+                </div>
+                <div class="grid-wrapper">
+                    <div id="grid" class="grid-container"></div>
+                </div>
+            </div>
+        </div>
+        <div id="contato" class="tab-content">
+            <h2>Contato</h2>
+            <div class="contact-form">
+                <input type="text" placeholder="Nome" id="nome">
+                <input type="email" placeholder="Email" id="email">
+                <textarea placeholder="Mensagem" id="mensagem" rows="5"></textarea>
+                <button onclick="enviarMensagem()">Enviar</button>
+            </div>
+            <div class="social-media">
+                <h3>EKPB Digital Music ©</h3>
+                <p><strong>Siga-nos nas Redes Sociais:</strong></p>
+                <p><i class="fab fa-instagram"></i> Instagram: <a href="https://instagram.com/ekpbdigitalmusic" target="_blank">@ekpbdigitalmusic</a></p>
+                <p><i class="fab fa-youtube"></i> YouTube: <a href="https://youtube.com/@ekpbdigitalmusic" target="_blank">@ekpbdigitalmusic</a></p>
+                <p><i class="fab fa-tiktok"></i> TikTok: <a href="https://tiktok.com/@ekpbdigitalmusic" target="_blank">@ekpbdigitalmusic</a></p>
+                <p><i class="fas fa-video"></i> Kwai: <a href="https://kwai.com/@ekpbdigitalmusic" target="_blank">@ekpbdigitalmusic</a></p>
+                <p><i class="fas fa-envelope"></i> Email: <a href="/cdn-cgi/l/email-protection#e287899280868b858b96838e8f97918b81a2858f838b8ecc818d8f">[email protected]</a></p>
+                <p><strong>Compositor</strong></p>
+                <p><i class="fab fa-instagram"></i> Instagram: <a href="https://instagram.com/edsonk.palacio" target="_blank">@edsonk.palacio</a></p>
+                <p><i class="fab fa-youtube"></i> YouTube: <a href="https://youtube.com/@edsonkpalacioo" target="_blank">@edsonkpalacioo</a></p>
+                <p><i class="fab fa-tiktok"></i> TikTok: <a href="https://tiktok.com/@edsonkpalacio" target="_blank">@edsonkpalacio</a></p>
+                <p><i class="fas fa-video"></i> Kwai: <a href="https://kwai.com/@edsonkpalacio" target="_blank">@edsonkpalacio</a></p>
+                <p><i class="fas fa-envelope"></i> Email: <a href="/cdn-cgi/l/email-protection#3c59584f53524c5d505d5f55537c5b515d5550125f5351">[email protected]</a></p>
+                <p><i class="fab fa-whatsapp"></i> Cel: <a href="https://wa.me/5588996812029" target="_blank">(88) 99681-2029</a></p>
+            </div>
+        </div>
+        <div id="ekpb" class="tab-content">
+            <h2>EKPB Digital Music ©</h2>
+            <ul class="links-list">
+                <li><i class="fab fa-youtube"></i> <a href="https://www.youtube.com/watch?v=AZ0mhfobGDc" target="_blank">Sobre Esta Pedra</a></li>
+                <li><i class="fab fa-youtube"></i> <a href="https://www.letras.mus.br/ekpb-digital-music/amor-de-pai-e-filho-grandes-amigos/" target="_blank">Amor de Pai e Filho Grandes Amigos</a></li>
+                <li><i class="fab fa-youtube"></i> <a href="https://www.youtube.com/watch?v=nKxcsx4-uxA" target="_blank">Vicent's Churrascaria</a></li>
+                <li><i class="fab fa-youtube"></i> <span>Joker Tecnologia</span></li>
+                <li><i class="fab fa-youtube"></i> <a href="https://www.youtube.com/watch?v=Csu2ZmEYxjk" target="_blank">Mãe da Igreja Mãe do Amor</a></li>
+                <li><i class="fab fa-youtube"></i> <span>Kauan Lugar Feito Para Você</span></li>
+                <li><i class="fab fa-youtube"></i> <span>Vida Gula - Um HIT No Lar</span></li>
+                <li><i class="fab fa-youtube"></i> <span>Vida Gula - Um HIT No Lar Hit</span></li>
+                <li><i class="fab fa-youtube"></i> <span>Mother of the Church, Mother of Love</span></li>
+                <li><i class="fab fa-youtube"></i> <span>Aleatory Family</span></li>
+            </ul>
+            <div class="social-media">
+                <h3>Canais no YouTube</h3>
+                <p><i class="fab fa-youtube"></i> <a href="https://youtube.com/@ekpbdigitalmusic" target="_blank">@ekpbdigitalmusic</a></p>
+                <p><i class="fab fa-youtube"></i> <a href="https://youtube.com/@edsonkpalacio" target="_blank">@edsonkpalacio</a></p>
+                <p><i class="fab fa-youtube"></i> <a href="https://youtube.com/@edsonkpalacioo" target="_blank">@edsonkpalacioo</a></p>
+            </div>
+        </div>
+        <div id="como-jogar" class="tab-content">
+            <h2>Como Jogar</h2>
+            <p>Bem-vindo(a) ao Jogo Caça-Palavras! Este jogo é simples e divertido, projetado para testar sua habilidade de encontrar palavras. Abaixo, você encontrará todas as instruções para jogar:</p>
+            <h3>Instruções</h3>
+            <ul>
+                <li><strong>Iniciar o Jogo:</strong>
+                    <ul>
+                        <li>Digite seu nome na tela inicial e clique em "Iniciar".</li>
+                        <li>Escolha um nível de dificuldade (Fácil, Médio, Difícil ou Muito Difícil) para começar o jogo. Você deve selecionar um modo antes de interagir com as letras do grid, ou uma mensagem será exibida.</li>
+                        <li>Antes de iniciar, você pode clicar em "NOVAS PALAVRAS" até 2 vezes para alterar a lista de palavras (mantendo EDSON, PAINHO, SAUDADES e JOAQUIM).</li>
+                        <li>Após escolher o nível, os botões de dificuldade serão desativados até que você reinicie o jogo.</li>
+                    </ul>
+                </li>
+                <li><strong>Objetivo:</strong>
+                    <ul>
+                        <li>Encontre todas as palavras listadas no grid de letras dentro do tempo limite por palavra.</li>
+                        <li>As palavras estão listadas acima do grid em uma lista suspensa.</li>
+                    </ul>
+                </li>
+                <li><strong>Passo a Passo:</strong>
+                    <ul>
+                        <li>Clique ou toque na primeira letra de uma palavra e, em seguida, clique ou toque na última letra da mesma palavra para selecioná-la.</li>
+                        <li>As palavras podem estar na horizontal, vertical, diagonal, e podem estar invertidas (de trás para frente).</li>
+                        <li>Quando uma palavra for encontrada, ela será destacada no grid (em verde) e marcada na lista com um traço no meio.</li>
+                        <li>Continue até encontrar todas as palavras do nível atual.</li>
+                    </ul>
+                </li>
+                <li><strong>Tempo:</strong>
+                    <ul>
+                        <li><strong>Tempo Total:</strong> Conta o tempo total do jogo, desde o início até encontrar todas as palavras ou o jogo terminar.</li>
+                        <li><strong>Tempo Palavra:</strong> Você tem 1 minuto (60 segundos) para encontrar cada palavra. Cada vez que encontrar uma palavra, o tempo de 1 minuto é reiniciado. Se o tempo acabar, o jogo termina com "Game Over".</li>
+                    </ul>
+                </li>
+                <li><strong>Níveis:</strong>
+                    <ul>
+                        <li><strong>Fácil:</strong> Grid 10x10, 8 palavras.</li>
+                        <li><strong>Médio:</strong> Grid 9x9, 8 palavras.</li>
+                        <li><strong>Difícil:</strong> Grid 12x12, 10 palavras.</li>
+                        <li><strong>Muito Difícil:</strong> Grid 15x15, 12 palavras.</li>
+                    </ul>
+                </li>
+                <li><strong>Reiniciar Jogo:</strong>
+                    <ul>
+                        <li>Clique em "Reiniciar Jogo" para voltar à tela inicial.</li>
+                        <li>Ao reiniciar, sua pontuação (tempo total e palavras encontradas) será zerada, e você será solicitado a digitar seu nome novamente.</li>
+                        <li>As palavras serão misturadas (mantendo EDSON, PAINHO, SAUDADES e JOAQUIM), e os botões de nível serão reativados, permitindo escolher um novo modo.</li>
+                    </ul>
+                </li>
+                <li><strong>Controles de Áudio:</strong>
+                    <ul>
+                        <li><strong>Música de Fundo:</strong> Use o botão de música (ícone de volume) para ligar/desligar a música de fundo. Na tela inicial, o botão "Som" também controla a música.</li>
+                        <li><strong>Sons do Jogo:</strong> Use o botão de sons (ícone de sino) para ligar/desligar os sons de interação (clique, acerto, erro, game over, vitória).</li>
+                    </ul>
+                </li>
+                <li><strong>Zoom (Dispositivos Móveis):</strong>
+                    <ul>
+                        <li>Em dispositivos móveis, um botão "Desativar Zoom" aparece. Use-o para ativar/desativar o zoom da página, facilitando a interação com o grid.</li>
+                    </ul>
+                </li>
+                <li><strong>Salvar e Carregar Jogo:</strong>
+                    <ul>
+                        <li><strong>Salvar Jogo:</strong> Clique em "Salvar Jogo" para baixar um arquivo JSON com o estado atual do jogo (grid, palavras encontradas, tempo, etc.).</li>
+                        <li><strong>Carregar Jogo:</strong> Clique em "Carregar Jogo" para abrir uma janela de seleção de arquivo e carregar um jogo salvo anteriormente.</li>
+                    </ul>
+                </li>
+                <li><strong>Ranking:</strong>
+                    <ul>
+                        <li>Seu desempenho é salvo no ranking quando você vence o jogo (encontra todas as palavras).</li>
+                        <li>O ranking é ordenado pela quantidade de palavras encontradas (maior primeiro) e, em caso de empate, pelo tempo total (menor primeiro).</li>
+                        <li>Você pode ver o ranking na tela inicial (botão "Ranking") ou na aba "Ranking" dentro do jogo.</li>
+                    </ul>
+                </li>
+                <li><strong>Condições de Vitória e Derrota:</strong>
+                    <ul>
+                        <li><strong>Vitória:</strong> Encontre todas as palavras do nível. Você verá uma mensagem de parabéns com o tempo total, sua pontuação será salva no ranking, e o jogo será reiniciado no mesmo nível.</li>
+                        <li><strong>Derrota:</strong> Se o tempo por palavra (1 minuto) acabar, o jogo termina com "Game Over", e você será levado de volta à tela inicial.</li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+        <div id="ranking-tab" class="tab-content">
+            <h2>Ranking</h2>
+            <div id="ranking-tab-content"></div>
+        </div>
+        <div class="copyright">
+            Technology EKPB Digital Music © | Powered by <a href="https://ekpbdigitalmusic.my.canva.site/" target="_blank">Edson Palácio</a>
+        </div>
+    </div>
+    <div id="ranking-modal">
+        <div id="ranking-modal-content">
+            <h2>Ranking</h2>
+            <div id="ranking-modal-body"></div>
+            <button id="close-ranking-modal" onclick="closeRankingModal()">Fechar</button>
+        </div>
+    </div>
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
+    <script>
+        const allWords = [
+            'OREO', 'VEVEIO', 'VOZINHO', 'VOZINHA', 'PÃOZINHO CARIOCA', 'PERDÃO', 'SAUDADES', 'MEL', 'DIDA',
+            'GLEUBA', 'GLEUMAR', 'LEVI', 'JANAINA', 'MAYCON', 'TIO', 'TIA', 'JESUS', 'MAIRA', 'DEUS',
+            'IGREJA', 'PASSEAR', 'PARQUINHO', 'PRAÇA', 'ALEATORY', 'VIDA GULA', 'SHEILA', 'YLANA', 'YAGO',
+            'GLEIDVAN', 'ANA', 'NARJARA TAYZE', 'JEEP', 'JOAQUIM', 'ELIAS', 'PINHEIRO', 'PAINHO', 'EDSON', 'PAPAI'
+        ];
+
+        const mandatoryWords = ['EDSON', 'PAINHO', 'SAUDADES', 'JOAQUIM'];
+
+        let words = {
+            easy: [],
+            medium: [],
+            hard: [],
+            'very-hard': []
+        };
+
+        const coloredWords = new Set([
+            'OREO', 'VEVEIO', 'VOZINHO', 'VOZINHA', 'PÃOZINHO CARIOCA', 'PERDÃO', 'SAUDADES', 'MEL', 'DIDA',
+            'GLEUBA', 'GLEUMAR', 'LEVI', 'JANAINA', 'MAYCON', 'TIO', 'TIA', 'JESUS', 'MAIRA', 'DEUS',
+            'IGREJA', 'PASSEAR', 'PARQUINHO', 'PRAÇA', 'ALEATORY', 'VIDA GULA', 'SHEILA', 'YLANA', 'YAGO',
+            'GLEIDVAN', 'ANA', 'NARJARA TAYZE', 'JEEP', 'JOAQUIM', 'ELIAS', 'PINHEIRO'
+        ]);
+
+        const sizes = { easy: 10, medium: 9, hard: 12, 'very-hard': 15 };
+        const wordTimeLimits = { easy: 60000, medium: 60000, hard: 60000, 'very-hard': 60000 };
+        const gridSizes = { easy: '300px', medium: '320px', hard: '360px', 'very-hard': '450px' };
+        const fontSizeReductions = { easy: 0.9, medium: 1.1, hard: 1.21, 'very-hard': 1.5 };
+        const baseFontSize = 0.9;
+        const baseFontSizeMobile = 1.2;
+        let grid = [];
+        let selectedCells = [];
+        let foundWords = new Set();
+        let isSelecting = false;
+        let isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        let firstCell = null;
+        let totalTimerInterval = null;
+        let wordTimerInterval = null;
+        let totalTime = 0;
+        let wordTime = 0;
+        let currentLevel = 'easy';
+        let playerName = '';
+        let colorChangeInterval = null;
+        let zoomEnabled = true;
+        let gameStarted = false;
+        let touchStartTime = 0;
+        let touchEndTime = 0;
+        let shuffleCount = 2;
+        const clickSound = new Audio('https://www.myinstants.com/media/sounds/click.mp3');
+        const successSound = new Audio('https://www.myinstants.com/media/sounds/yes_1.mp3');
+        const errorSound = new Audio('https://www.myinstants.com/media/sounds/no_4.mp3');
+        const gameOverSound = new Audio('https://www.myinstants.com/media/sounds/game-over.mp3');
+        const applauseSound = new Audio('https://www.myinstants.com/media/sounds/applause.mp3');
+        const continuousMusic = new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3');
+        continuousMusic.loop = true;
+        continuousMusic.volume = 0.2;
+        let musicPlaying = false;
+        let soundsEnabled = true;
+        const colors = ['#ff0000', '#0000ff', '#800080', '#ffa500'];
+        let currentColorIndex = 0;
+
+        function shuffleWords(level) {
+            const availableWords = allWords.filter(word => !mandatoryWords.includes(word));
+            const shuffled = availableWords.sort(() => Math.random() - 0.5);
+            let selectedWords = [];
+            if (level === 'easy') {
+                selectedWords = mandatoryWords.slice(0, 2).concat(shuffled.slice(0, 6));
+            } else if (level === 'medium') {
+                selectedWords = mandatoryWords.slice(0, 3).concat(shuffled.slice(0, 5));
+            } else if (level === 'hard') {
+                selectedWords = mandatoryWords.concat(shuffled.slice(0, 6));
+            } else if (level === 'very-hard') {
+                selectedWords = mandatoryWords.concat(shuffled.slice(0, 8));
+            }
+            return selectedWords;
+        }
+
+        function initializeWords() {
+            words.easy = shuffleWords('easy');
+            words.medium = shuffleWords('medium');
+            words.hard = shuffleWords('hard');
+            words['very-hard'] = shuffleWords('very-hard');
+            renderWordList(words[currentLevel]);
+        }
+
+        function shuffleWordsBeforeStart() {
+            if (gameStarted) {
+                alert('Você não pode misturar as palavras após iniciar o jogo!');
+                return;
+            }
+            if (shuffleCount <= 0) {
+                alert('Você já usou todas as suas chances de misturar as palavras!');
+                return;
+            }
+            shuffleCount--;
+            document.getElementById('shuffle-count').textContent = shuffleCount;
+            if (shuffleCount === 0) {
+                document.getElementById('shuffle-button').disabled = true;
+            }
+            initializeWords();
+        }
+
+        initializeWords();
+
+        function checkNameAndPlayMusic() {
+            const nameInput = document.getElementById('player-name');
+            const startButton = document.getElementById('start-button');
+            playerName = nameInput.value.trim();
+            startButton.disabled = playerName.length === 0;
+            if (playerName.length > 0 && !musicPlaying) {
+                toggleMusic();
+            }
+        }
+
+        function startWithName() {
+            if (playerName.length > 0) {
+                document.getElementById('start-screen').style.display = 'none';
+                document.getElementById('game-content').style.display = 'block';
+                updatePlayerDisplay();
+                gameStarted = false;
+                renderGrid(currentLevel);
+                renderWordList(words[currentLevel]);
+                document.getElementById('shuffle-button').disabled = false; // Garantir que o botão esteja habilitado ao entrar na tela de jogo
+            }
+        }
+
+        function restartGame() {
+            totalTime = 0;
+            wordTime = wordTimeLimits[currentLevel];
+            foundWords.clear();
+            playerName = '';
+            shuffleCount = 2;
+            document.getElementById('shuffle-count').textContent = shuffleCount;
+            document.getElementById('shuffle-button').disabled = false;
+            updatePlayerDisplay();
+            initializeWords();
+            showStartScreen();
+        }
+
+        function showStartScreen() {
+            clearInterval(totalTimerInterval);
+            clearInterval(wordTimerInterval);
+            clearInterval(colorChangeInterval);
+            document.getElementById('game-content').style.display = 'none';
+            document.getElementById('start-screen').style.display = 'block';
+            document.getElementById('player-name').value = '';
+            document.getElementById('start-button').disabled = true;
+            gameStarted = false;
+            document.getElementById('easy-button').disabled = false;
+            document.getElementById('medium-button').disabled = false;
+            document.getElementById('hard-button').disabled = false;
+            document.getElementById('very-hard-button').disabled = false;
+            checkNameAndPlayMusic();
+        }
+
+        function updatePlayerDisplay() {
+            const playerDisplay = document.getElementById('player-display');
+            playerDisplay.textContent = playerName || 'Jogador';
+        }
+
+        function toggleMusic() {
+            musicPlaying = !musicPlaying;
+            const musicaControle = document.getElementById('musica-controle');
+            const musicToggle = document.getElementById('music-toggle');
+            if (musicPlaying) {
+                musicaControle.classList.remove('desligado');
+                musicaControle.classList.remove('fa-volume-mute');
+                musicaControle.classList.add('ligado');
+                musicaControle.classList.add('fa-volume-up');
+                musicToggle.innerHTML = '<i class="fas fa-volume-up"></i> Som';
+                continuousMusic.play().catch(err => {
+                    console.error('Erro ao tocar música:', err);
+                    musicPlaying = false;
+                    musicaControle.classList.remove('ligado');
+                    musicaControle.classList.remove('fa-volume-up');
+                    musicaControle.classList.add('desligado');
+                    musicaControle.classList.add('fa-volume-mute');
+                    musicToggle.innerHTML = '<i class="fas fa-volume-down"></i> Som';
+                });
+            } else {
+                musicaControle.classList.remove('ligado');
+                musicaControle.classList.remove('fa-volume-up');
+                musicaControle.classList.add('desligado');
+                musicaControle.classList.add('fa-volume-mute');
+                musicToggle.innerHTML = '<i class="fas fa-volume-down"></i> Som';
+                continuousMusic.pause();
+            }
+        }
+
+        function toggleSounds() {
+            soundsEnabled = !soundsEnabled;
+            const sonsControle = document.getElementById('sons-controle');
+            if (soundsEnabled) {
+                sonsControle.classList.remove('desligado');
+                sonsControle.classList.remove('fa-bell-slash');
+                sonsControle.classList.add('ligado');
+                sonsControle.classList.add('fa-bell');
+            } else {
+                sonsControle.classList.remove('ligado');
+                sonsControle.classList.remove('fa-bell');
+                sonsControle.classList.add('desligado');
+                sonsControle.classList.add('fa-bell-slash');
+            }
+        }
+
+        function toggleZoom() {
+            zoomEnabled = !zoomEnabled;
+            const zoomToggle = document.getElementById('zoom-toggle');
+            const viewport = document.getElementById('viewport');
+            if (zoomEnabled) {
+                zoomToggle.textContent = 'Desativar Zoom';
+                zoomToggle.classList.remove('desativado');
+                viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=0.5, maximum-scale=3.0, viewport-fit=cover');
+            } else {
+                zoomToggle.textContent = 'Ativar Zoom';
+                zoomToggle.classList.add('desativado');
+                viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover');
+            }
+        }
+
+        function playSound(sound) {
+            if (soundsEnabled) {
+                sound.currentTime = 0;
+                sound.play().catch(err => {
+                    console.error('Erro ao tocar som:', err);
+                });
+            }
+        }
+
+        function openTab(evt, tabName) {
+            const tabs = document.querySelectorAll('.main-tabs > .tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+            evt.currentTarget.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+            if (tabName === 'ranking-tab') {
+                renderRankingTab();
+            }
+        }
+
+        function formatTime(milliseconds) {
+            const seconds = Math.floor(milliseconds / 1000);
+            const millis = Math.floor((milliseconds % 1000));
+            return `${seconds}.${millis.toString().padStart(3, '0')}`;
+        }
+
+        function startTimers() {
+            if (totalTimerInterval) clearInterval(totalTimerInterval);
+            totalTime = 0;
+            document.getElementById('total-time').textContent = formatTime(totalTime);
+            totalTimerInterval = setInterval(() => {
+                totalTime += 10;
+                document.getElementById('total-time').textContent = formatTime(totalTime);
+            }, 10);
+            if (wordTimerInterval) clearInterval(wordTimerInterval);
+            wordTime = wordTimeLimits[currentLevel];
+            document.getElementById('word-time').textContent = formatTime(wordTime);
+            wordTimerInterval = setInterval(() => {
+                wordTime -= 10;
+                document.getElementById('word-time').textContent = formatTime(wordTime);
+                if (wordTime <= 0) {
+                    clearInterval(totalTimerInterval);
+                    clearInterval(wordTimerInterval);
+                    playSound(gameOverSound);
+                    alert('GAME OVER! O tempo para encontrar a palavra acabou.');
+                    showStartScreen();
+                }
+            }, 10);
+        }
+
+        function resetWordTimer() {
+            if (wordTimerInterval) clearInterval(wordTimerInterval);
+            wordTime = wordTimeLimits[currentLevel];
+            document.getElementById('word-time').textContent = formatTime(wordTime);
+            wordTimerInterval = setInterval(() => {
+                wordTime -= 10;
+                document.getElementById('word-time').textContent = formatTime(wordTime);
+                if (wordTime <= 0) {
+                    clearInterval(totalTimerInterval);
+                    clearInterval(wordTimerInterval);
+                    playSound(gameOverSound);
+                    alert('GAME OVER! O tempo para encontrar a palavra acabou.');
+                    showStartScreen();
+                }
+            }, 10);
+        }
+
+        function saveToRanking(wordsFound, timeTaken, level) {
+            const rankingKey = `ranking_${level}`;
+            let ranking = JSON.parse(localStorage.getItem(rankingKey)) || [];
+            ranking.push({ name: playerName, wordsFound: wordsFound, time: timeTaken, level: level });
+            ranking.sort((a, b) => {
+                if (b.wordsFound !== a.wordsFound) {
+                    return b.wordsFound - a.wordsFound;
+                }
+                return a.time - b.time;
+            });
+            if (ranking.length > 10) ranking = ranking.slice(0, 10);
+            localStorage.setItem(rankingKey, JSON.stringify(ranking));
+        }
+
+        function getRanking(level) {
+            const rankingKey = `ranking_${level}`;
+            return JSON.parse(localStorage.getItem(rankingKey)) || [];
+        }
+
+        function renderRanking() {
+            let html = '';
+            ['easy', 'medium', 'hard', 'very-hard'].forEach(level => {
+                const ranking = getRanking(level);
+                if (ranking.length === 0) return;
+                html += `<h3>${level.charAt(0).toUpperCase() + level.slice(1)}</h3>`;
+                html += '<table>';
+                html += '<tr><th>Posição</th><th>Nome</th><th>Palavras Encontradas</th><th>Tempo</th><th>Nível</th></tr>';
+                ranking.forEach((entry, index) => {
+                    html += `<tr>
+                        <td>${index + 1}</td>
+                        <td>${entry.name}</td>
+                        <td>${entry.wordsFound}</td>
+                        <td>${formatTime(entry.time)}</td>
+                        <td>${entry.level.charAt(0).toUpperCase() + level.slice(1)}</td>
+                    </tr>`;
+                });
+                html += '</table>';
+            });
+            if (!html) {
+                html = '<p>Nenhum registro no ranking ainda.</p>';
+            }
+            return html;
+        }
+
+        function showRankingModal() {
+            const modal = document.getElementById('ranking-modal');
+            const modalBody = document.getElementById('ranking-modal-body');
+            modalBody.innerHTML = renderRanking();
+            modal.style.display = 'flex';
+        }
+
+        function closeRankingModal() {
+            const modal = document.getElementById('ranking-modal');
+            modal.style.display = 'none';
+        }
+
+        function renderRankingTab() {
+            const rankingTabContent = document.getElementById('ranking-tab-content');
+            rankingTabContent.innerHTML = renderRanking();
+        }
+
+        function startColorChange() {
+            if (colorChangeInterval) clearInterval(colorChangeInterval);
+            colorChangeInterval = setInterval(() => {
+                currentColorIndex = (currentColorIndex + 1) % colors.length;
+                const wordList = document.getElementById('word-list');
+                Array.from(wordList.options).forEach(option => {
+                    if (!option.classList.contains('word-found') && coloredWords.has(option.value)) {
+                        option.style.color = colors[currentColorIndex];
+                    }
+                });
+            }, 500);
+        }
+
+        function checkGameStarted() {
+            if (!gameStarted) {
+                alert('Por favor, escolha um modo (Fácil, Médio, Difícil ou Muito Difícil) antes de começar!');
+                return false;
+            }
+            return true;
+        }
+
+        function scrollToGrid() {
+            const grid = document.getElementById('grid');
+            grid.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        }
+
+        function startGame(level) {
+            if (gameStarted) return;
+            currentLevel = level;
+            const size = sizes[level];
+            const wordList = words[level];
+            foundWords.clear();
+            selectedCells = [];
+            firstCell = null;
+            generateGrid(size, wordList);
+            renderGrid(level);
+            renderWordList(wordList);
+            startTimers();
+            startColorChange();
+            gameStarted = true;
+            document.getElementById('easy-button').disabled = true;
+            document.getElementById('medium-button').disabled = true;
+            document.getElementById('hard-button').disabled = true;
+            document.getElementById('very-hard-button').disabled = true;
+            document.getElementById('shuffle-button').disabled = true;
+            scrollToGrid();
+        }
+
+        function generateGrid(size, wordList) {
+            grid = Array(size).fill().map(() => Array(size).fill(''));
+            const directions = [
+                [0, 1], [1, 0], [1, 1], [-1, 0], [0, -1], [-1, -1], [1, -1], [-1, 1]
+            ];
+            wordList.forEach(word => {
+                let placed = false;
+                let attempts = 0;
+                while (!placed && attempts < 100) {
+                    const dir = directions[Math.floor(Math.random() * directions.length)];
+                    const row = Math.floor(Math.random() * size);
+                    const col = Math.floor(Math.random() * size);
+                    if (canPlaceWord(word, row, col, dir, size)) {
+                        placeWord(word, row, col, dir);
+                        placed = true;
+                    }
+                    attempts++;
+                }
+                if (!placed) {
+                    console.warn(`Não foi possível colocar a palavra: ${word}`);
+                }
+            });
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    if (!grid[i][j]) {
+                        grid[i][j] = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+                    }
+                }
+            }
+        }
+
+        function canPlaceWord(word, row, col, dir, size) {
+            const [dr, dc] = dir;
+            for (let i = 0; i < word.length; i++) {
+                const r = row + i * dr;
+                const c = col + i * dc;
+                if (r < 0 || r >= size || c < 0 || c >= size || (grid[r][c] && grid[r][c] !== word[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function placeWord(word, row, col, dir) {
+            const [dr, dc] = dir;
+            for (let i = 0; i < word.length; i++) {
+                const r = row + i * dr;
+                const c = col + i * dc;
+                grid[r][c] = word[i];
+            }
+        }
+
+        function renderGrid(level) {
+            const gridDiv = document.getElementById('grid');
+            gridDiv.innerHTML = '';
+            const size = sizes[level];
+            gridDiv.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+            gridDiv.style.width = gridSizes[level];
+            gridDiv.style.height = gridSizes[level];
+            const reduction = fontSizeReductions[level];
+            const baseSize = window.innerWidth <= 600 ? baseFontSizeMobile : baseFontSize;
+            const fontSize = baseSize * reduction;
+            grid.forEach((row, i) => {
+                row.forEach((cell, j) => {
+                    const cellDiv = document.createElement('div');
+                    cellDiv.className = 'grid-cell';
+                    cellDiv.textContent = cell;
+                    cellDiv.dataset.row = i;
+                    cellDiv.dataset.col = j;
+                    cellDiv.style.fontSize = `${fontSize}rem`;
+                    if (foundWords.has(cell)) {
+                        cellDiv.classList.add('found');
+                    }
+                    cellDiv.addEventListener('touchstart', handleTouchStart);
+                    cellDiv.addEventListener('touchend', handleTouchEnd);
+                    cellDiv.addEventListener('click', handleClick);
+                    gridDiv.appendChild(cellDiv);
+                });
+            });
+        }
+
+        function renderWordList(wordList) {
+            const wordListSelect = document.getElementById('word-list');
+            wordListSelect.innerHTML = '';
+            wordList.forEach(word => {
+                const option = document.createElement('option');
+                option.value = word;
+                option.textContent = word;
+                if (foundWords.has(word)) {
+                    option.className = 'word-found';
+                }
+                wordListSelect.appendChild(option);
+            });
+            startColorChange();
+        }
+
+        function handleTouchStart(event) {
+            if (!checkGameStarted()) return;
+            event.preventDefault();
+            touchStartTime = Date.now();
+            if (!firstCell) {
+                firstCell = event.target;
+                selectedCells = [{ row: parseInt(firstCell.dataset.row), col: parseInt(firstCell.dataset.col) }];
+                firstCell.classList.add('selected');
+                playSound(clickSound);
+            }
+        }
+
+        function handleTouchEnd(event) {
+            if (!checkGameStarted()) return;
+            event.preventDefault();
+            touchEndTime = Date.now();
+            const touchDuration = touchEndTime - touchStartTime;
+            const secondCell = event.target.closest('.grid-cell');
+            if (secondCell && secondCell !== firstCell) {
+                selectedCells = getCellsBetween(firstCell, secondCell);
+                firstCell.classList.add('selected');
+                secondCell.classList.add('selected');
+                checkSelectedWord();
+                firstCell = null;
+            } else {
+                selectedCells.forEach(c => {
+                    const cell = document.querySelector(`.grid-cell[data-row="${c.row}"][data-col="${c.col}"]`);
+                    if (cell) cell.classList.remove('selected');
+                });
+                selectedCells = [];
+                firstCell = null;
+            }
+        }
+
+        function handleClick(event) {
+            if (!checkGameStarted()) return;
+            const cell = event.target;
+            playSound(clickSound);
+            if (!firstCell) {
+                firstCell = cell;
+                selectedCells = [{ row: parseInt(cell.dataset.row), col: parseInt(cell.dataset.col) }];
+                cell.classList.add('selected');
+            } else if (firstCell !== cell) {
+                selectedCells = getCellsBetween(firstCell, cell);
+                firstCell.classList.add('selected');
+                cell.classList.add('selected');
+                checkSelectedWord();
+                firstCell = null;
+            } else {
+                selectedCells.forEach(c => {
+                    const cell = document.querySelector(`.grid-cell[data-row="${c.row}"][data-col="${c.col}"]`);
+                    if (cell) cell.classList.remove('selected');
+                });
+                selectedCells = [];
+                firstCell = null;
+            }
+        }
+
+        function getCellsBetween(startCell, endCell) {
+            const startRow = parseInt(startCell.dataset.row);
+            const startCol = parseInt(startCell.dataset.col);
+            const endRow = parseInt(endCell.dataset.row);
+            const endCol = parseInt(endCell.dataset.col);
+            const cells = [];
+            const dr = endRow - startRow;
+            const dc = endCol - startCol;
+            const steps = Math.max(Math.abs(dr), Math.abs(dc));
+            if (steps === 0) return [{ row: startRow, col: startCol }];
+            const stepRow = dr / steps;
+            const stepCol = dc / steps;
+            for (let i = 0; i <= steps; i++) {
+                const r = Math.round(startRow + i * stepRow);
+                const c = Math.round(startCol + i * stepCol);
+                if (r >= 0 && r < grid.length && c >= 0 && c < grid[0].length) {
+                    cells.push({ row: r, col: c });
+                }
+            }
+            return cells;
+        }
+
+        function checkSelectedWord() {
+            const selectedWord = selectedCells.map(c => grid[c.row][c.col]).join('');
+            const wordList = Object.values(words).flat();
+            if (wordList.includes(selectedWord) && !foundWords.has(selectedWord)) {
+                foundWords.add(selectedWord);
+                selectedCells.forEach(c => {
+                    const cell = document.querySelector(`.grid-cell[data-row="${c.row}"][data-col="${c.col}"]`);
+                    cell.classList.remove('selected');
+                    cell.classList.add('found');
+                });
+                playSound(successSound);
+                renderWordList(words[currentLevel]);
+                resetWordTimer();
+                if (foundWords.size === words[currentLevel].length) {
+                    clearInterval(totalTimerInterval);
+                    clearInterval(wordTimerInterval);
+                    clearInterval(colorChangeInterval);
+                    playSound(applauseSound);
+                    saveToRanking(foundWords.size, totalTime, currentLevel);
+                    alert(`Parabéns, ${playerName}! Você encontrou todas as palavras em ${formatTime(totalTime)} segundos!`);
+                    startGame(currentLevel);
+                }
+            } else {
+                selectedCells.forEach(c => {
+                    const cell = document.querySelector(`.grid-cell[data-row="${c.row}"][data-col="${c.col}"]`);
+                    cell.classList.remove('selected');
+                });
+                playSound(errorSound);
+            }
+            selectedCells = [];
+        }
+
+        function saveGame() {
+            const gameState = {
+                grid: grid,
+                foundWords: Array.from(foundWords),
+                currentLevel: currentLevel,
+                totalTime: totalTime,
+                wordTime: wordTime,
+                playerName: playerName,
+                musicPlaying: musicPlaying,
+                soundsEnabled: soundsEnabled,
+                zoomEnabled: zoomEnabled,
+                gameStarted: gameStarted,
+                words: words,
+                shuffleCount: shuffleCount
+            };
+            const gameStateJson = JSON.stringify(gameState);
+            const blob = new Blob([gameStateJson], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'caca-palavras-save.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function triggerLoadGame() {
+            const loadInput = document.getElementById('load-file-input');
+            loadInput.click();
+        }
+
+        function loadGameFromFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const gameState = JSON.parse(e.target.result);
+                    grid = gameState.grid;
+                    foundWords = new Set(gameState.foundWords);
+                    currentLevel = gameState.currentLevel;
+                    totalTime = gameState.totalTime;
+                    wordTime = gameState.wordTime;
+                    playerName = gameState.playerName || 'Jogador';
+                    musicPlaying = gameState.musicPlaying;
+                    soundsEnabled = gameState.soundsEnabled;
+                    zoomEnabled = gameState.zoomEnabled;
+                    gameStarted = gameState.gameStarted;
+                    words = gameState.words || words;
+                    shuffleCount = gameState.shuffleCount !== undefined ? gameState.shuffleCount : 2;
+                    document.getElementById('shuffle-count').textContent = shuffleCount;
+                    if (shuffleCount === 0 || gameStarted) {
+                        document.getElementById('shuffle-button').disabled = true;
+                    } else {
+                        document.getElementById('shuffle-button').disabled = false;
+                    }
+                    document.getElementById('start-screen').style.display = 'none';
+                    document.getElementById('game-content').style.display = 'block';
+                    updatePlayerDisplay();
+                    renderGrid(currentLevel);
+                    renderWordList(words[currentLevel]);
+                    startTimers();
+                    document.getElementById('total-time').textContent = formatTime(totalTime);
+                    document.getElementById('word-time').textContent = formatTime(wordTime);
+                    const musicaControle = document.getElementById('musica-controle');
+                    const musicToggle = document.getElementById('music-toggle');
+                    const sonsControle = document.getElementById('sons-controle');
+                    const zoomToggle = document.getElementById('zoom-toggle');
+                    const viewport = document.getElementById('viewport');
+                    if (musicPlaying) {
+                        musicaControle.classList.remove('desligado');
+                        musicaControle.classList.remove('fa-volume-mute');
+                        musicaControle.classList.add('ligado');
+                        musicaControle.classList.add('fa-volume-up');
+                        musicToggle.innerHTML = '<i class="fas fa-volume-up"></i> Som';
+                        continuousMusic.play().catch(err => console.error('Erro ao tocar música:', err));
+                    } else {
+                        musicaControle.classList.remove('ligado');
+                        musicaControle.classList.remove('fa-volume-up');
+                        musicaControle.classList.add('desligado');
+                        musicaControle.classList.add('fa-volume-mute');
+                        musicToggle.innerHTML = '<i class="fas fa-volume-down"></i> Som';
+                        continuousMusic.pause();
+                    }
+                    if (soundsEnabled) {
+                        sonsControle.classList.remove('desligado');
+                        sonsControle.classList.remove('fa-bell-slash');
+                        sonsControle.classList.add('ligado');
+                        sonsControle.classList.add('fa-bell');
+                    } else {
+                        sonsControle.classList.remove('ligado');
+                        sonsControle.classList.remove('fa-bell');
+                        sonsControle.classList.add('desligado');
+                        sonsControle.classList.add('fa-bell-slash');
+                    }
+                    if (zoomEnabled) {
+                        zoomToggle.textContent = 'Desativar Zoom';
+                        zoomToggle.classList.remove('desativado');
+                        viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=0.5, maximum-scale=3.0, viewport-fit=cover');
+                    } else {
+                        zoomToggle.textContent = 'Ativar Zoom';
+                        zoomToggle.classList.add('desativado');
+                        viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover');
+                    }
+                    if (gameStarted) {
+                        document.getElementById('easy-button').disabled = true;
+                        document.getElementById('medium-button').disabled = true;
+                        document.getElementById('hard-button').disabled = true;
+                        document.getElementById('very-hard-button').disabled = true;
+                    } else {
+                        document.getElementById('easy-button').disabled = false;
+                        document.getElementById('medium-button').disabled = false;
+                        document.getElementById('hard-button').disabled = false;
+                        document.getElementById('very-hard-button').disabled = false;
+                    }
+                    startColorChange();
+                } catch (err) {
+                    console.error('Erro ao carregar o jogo:', err);
+                    alert('Erro ao carregar o jogo. Verifique se o arquivo é válido.');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function enviarMensagem() {
+            const nome = document.getElementById('nome').value;
+            const email = document.getElementById('email').value;
+            const mensagem = document.getElementById('mensagem').value;
+            if (nome && email && mensagem) {
+                alert(`Mensagem enviada com sucesso!\nNome: ${nome}\nEmail: ${email}\nMensagem: ${mensagem}`);
+                document.getElementById('nome').value = '';
+                document.getElementById('email').value = '';
+                document.getElementById('mensagem').value = '';
+            } else {
+                alert('Por favor, preencha todos os campos.');
+            }
+        }
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9393ddc55d89bf98',t:'MTc0NjE1MDYxMC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
