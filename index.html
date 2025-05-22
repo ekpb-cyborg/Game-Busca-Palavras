@@ -202,7 +202,7 @@
             background: #FFD700;
         }
         .cell.found {
-            background: #4682B4; /* Cor mais forte para palavras encontradas */
+            background: #4682B4;
             cursor: default;
         }
         .contact-form {
@@ -579,16 +579,19 @@
                 'UNIAO', 'GRATIDAO', 'BONDADE', 'VERDADE', 'HARMONIA', 'POESIA'
             ],
             sounds: {
-                click: 'aud/click.mp3',
-                hover: 'botaos/hover.mp3',
-                type: 'aud/type.mp3',
-                start: 'aud/start.mp3',
-                success: 'aud/success.mp3',
-                error: 'aud/error.mp3',
-                gameOver: 'aud/game-over.mp3',
-                win: 'aud/win.mp3'
+                click: '/aud/click.mp3',
+                hover: '/aud/botaos/hover.mp3',
+                type: '/aud/type.mp3',
+                start: '/aud/start.mp3',
+                success: '/aud/aplausos.mp3', // Alterado de 'success.mp3' para 'aplausos.mp3'
+                error: '/aud/error.mp3',
+                gameOver: '/aud/game-over.mp3',
+                win: '/aud/win.mp3'
             },
-            music: 'aud/background.mp3'
+            music: {
+                musical1: '/aud/musical1.mp3',
+                musical2: '/aud/musical2.mp3'
+            }
         };
 
         let state = {
@@ -608,6 +611,7 @@
             musicOn: true,
             soundOn: true,
             musicAudio: null,
+            currentMusic: 'musical1', // Rastreia qual música está tocando
             audioUnlocked: false
         };
 
@@ -708,6 +712,7 @@
             state.wordTime = 60000;
             state.gameStarted = false;
             state.newWordsCount = 2;
+            state.currentMusic = 'musical1'; // Reseta para musical1 ao reiniciar
             if (state.timerInterval) clearInterval(state.timerInterval);
             if (state.wordTimerInterval) clearInterval(state.wordTimerInterval);
 
@@ -720,6 +725,14 @@
             dom.wordTime.textContent = '60.000';
             dom.wordsDropdown.innerHTML = '';
             dom.grid.innerHTML = '';
+
+            // Reativar botões de dificuldade para permitir nova modalidade
+            const difficultyButtons = [dom.easyButton, dom.mediumButton, dom.hardButton, dom.veryHardButton];
+            difficultyButtons.forEach(btn => btn.disabled = false);
+
+            // Gerar novas palavras (mantendo as palavras base)
+            generateWords();
+            updateWordsDropdown();
 
             const savedRanking = localStorage.getItem('wordSearchRanking');
             if (savedRanking) {
@@ -744,7 +757,10 @@
             }
 
             if (state.soundOn && state.audioUnlocked) playSound(audio.start);
-            if (state.musicOn && state.audioUnlocked) playMusic();
+            if (state.musicOn && state.audioUnlocked) {
+                state.currentMusic = 'musical1'; // Começa com musical1
+                playMusic();
+            }
 
             state.ranking = state.ranking.filter(entry => entry.playerName !== state.playerName);
             state.ranking.push({
@@ -966,7 +982,7 @@
             if (found) {
                 markWord(cell1, cell2);
                 state.wordTime = 60000;
-                if (state.soundOn && state.audioUnlocked) playSound(audio.success);
+                if (state.soundOn && state.audioUnlocked) playSound(audio.success); // Toca aplausos
 
                 const playerEntry = state.ranking.find(entry => entry.playerName === state.playerName);
                 if (playerEntry) {
@@ -986,7 +1002,7 @@
                     saveGameState(true);
                     alert(`Parabéns, ${state.playerName}! Você encontrou todas as palavras em ${formatTime(state.totalTime)}!`);
                     localStorage.setItem('wordSearchRanking', JSON.stringify(state.ranking));
-                    setupLevel(state.level);
+                    initializeGame(); // Reseta o jogo e permite nova modalidade
                 }
             } else {
                 if (state.soundOn && state.audioUnlocked) playSound(audio.error);
@@ -1101,9 +1117,7 @@
                     }
                     saveGameState(true);
                     alert('Game Over! O tempo para encontrar a próxima palavra acabou. Clique em "Reiniciar Jogo" para tentar novamente.');
-                    state.gameStarted = false;
-                    const difficultyButtons = [dom.easyButton, dom.mediumButton, dom.hardButton, dom.veryHardButton];
-                    difficultyButtons.forEach(btn => btn.disabled = false);
+                    initializeGame(); // Reseta e permite nova modalidade
                 }
             }, 10);
         }
@@ -1220,14 +1234,21 @@
                     state.musicAudio.pause();
                     state.musicAudio.currentTime = 0;
                 }
-                state.musicAudio = new Audio(config.music);
-                state.musicAudio.loop = true;
+                const musicFile = state.currentMusic === 'musical1' ? config.music.musical1 : config.music.musical2;
+                state.musicAudio = new Audio(musicFile);
                 state.musicAudio.volume = 0.5;
+                state.musicAudio.loop = false; // Desativa o loop para permitir a troca
                 try {
                     state.musicAudio.play().catch(err => console.warn('Erro ao tocar música:', err));
                 } catch (err) {
                     console.warn('Erro ao tentar tocar música:', err);
                 }
+
+                // Quando a música terminar, alternar para a próxima
+                state.musicAudio.addEventListener('ended', () => {
+                    state.currentMusic = state.currentMusic === 'musical1' ? 'musical2' : 'musical1';
+                    playMusic(); // Toca a próxima música
+                }, { once: true });
             }
         }
 
